@@ -1,0 +1,11 @@
+services:
+  license-server:
+    build: .
+    ports:
+      - "28080:8080"
+    environment:
+      - ADMIN_TOKEN=a20254393
+      - PORT=8080
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
