@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -12,6 +13,12 @@ import (
 )
 
 func getClientIP(c *gin.Context) string {
+	if cfIP := c.GetHeader("CF-Connecting-IP"); cfIP != "" {
+		ip := strings.TrimSpace(cfIP)
+		if parsed := net.ParseIP(ip); parsed != nil {
+			return ip
+		}
+	}
 	if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
 		parts := strings.Split(xff, ",")
 		ip := strings.TrimSpace(parts[0])
@@ -52,15 +59,18 @@ func adminAuth() gin.HandlerFunc {
 
 func handleIssue(c *gin.Context) {
 	ip := getClientIP(c)
+	fmt.Printf("[issue] client_ip=%s remote_addr=%s x_forwarded_for=%s x_real_ip=%s\n",
+		ip, c.Request.RemoteAddr, c.GetHeader("X-Forwarded-For"), c.GetHeader("X-Real-IP"))
 	license, err := dbFindLicenseByIP(ip)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	if license == nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "该IP未被授权"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "该IP未被授权", "detected_ip": ip})
 		return
 	}
+	c.Header("X-Detected-IP", ip)
 	c.JSON(http.StatusOK, license)
 }
 
