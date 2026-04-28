@@ -12,7 +12,45 @@ import (
 	"github.com/google/uuid"
 )
 
+var trustedCIDRs []*net.IPNet
+
+func initTrustedProxies() {
+	defaults := []string{
+		"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+		"127.0.0.0/8", "::1/128", "fc00::/7",
+	}
+	if extra := os.Getenv("TRUSTED_PROXIES"); extra != "" {
+		defaults = append(defaults, strings.Split(extra, ",")...)
+	}
+	for _, cidr := range defaults {
+		_, network, err := net.ParseCIDR(strings.TrimSpace(cidr))
+		if err == nil {
+			trustedCIDRs = append(trustedCIDRs, network)
+		}
+	}
+}
+
+func isTrustedProxy(ip string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, cidr := range trustedCIDRs {
+		if cidr.Contains(parsed) {
+			return true
+		}
+	}
+	return false
+}
+
 func getClientIP(c *gin.Context) string {
+	remoteIP, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+	if err != nil {
+		remoteIP = c.Request.RemoteAddr
+	}
+	if !isTrustedProxy(remoteIP) {
+		return remoteIP
+	}
 	if cfIP := c.GetHeader("CF-Connecting-IP"); cfIP != "" {
 		ip := strings.TrimSpace(cfIP)
 		if parsed := net.ParseIP(ip); parsed != nil {
@@ -32,11 +70,7 @@ func getClientIP(c *gin.Context) string {
 			return ip
 		}
 	}
-	host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
-	if err != nil {
-		return c.Request.RemoteAddr
-	}
-	return host
+	return remoteIP
 }
 
 func adminAuth() gin.HandlerFunc {

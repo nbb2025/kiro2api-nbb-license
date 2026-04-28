@@ -19,6 +19,7 @@ func main() {
 	}
 
 	dataDir := "./data"
+	initTrustedProxies()
 	if err := initKeys(dataDir); err != nil {
 		log.Fatalf("Failed to init keys: %v", err)
 	}
